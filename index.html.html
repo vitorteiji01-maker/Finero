@@ -1144,6 +1144,47 @@
       }
     }
 
+  
+    /* ===== Ordenação da aba Transações ===== */
+    .transaction-sort-box{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      margin:0 0 14px;
+      color:#475569;
+      font-size:14px;
+      font-weight:800;
+    }
+    .transaction-sort-box select{
+      min-width:220px;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+      color:#334155;
+      font-weight:800;
+      outline:none;
+    }
+    .transaction-sort-box select:focus{
+      border-color:var(--primary);
+      box-shadow:0 0 0 3px rgba(91,53,242,.1);
+    }
+    @media(max-width:820px){
+      .transaction-sort-box{
+        justify-content:stretch;
+        align-items:stretch;
+        flex-direction:column;
+        margin:0 0 12px;
+        font-size:13px;
+      }
+      .transaction-sort-box select{
+        width:100%;
+        min-width:0;
+        height:44px;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -1190,6 +1231,13 @@
 
       <div id="transactionsPage" class="page hidden">
         <div class="page-head"><h1>Transações</h1><div class="actions"><button class="btn secondary small" id="categoriesBtn">◇ Categorias</button><button class="btn small" id="newTransactionBtnPage">＋ Nova</button></div></div>
+        <div class="transaction-sort-box">
+          <label for="transactionSortOrder">Ordenar transações</label>
+          <select id="transactionSortOrder">
+            <option value="desc">Mais recente primeiro</option>
+            <option value="asc">Mais antiga primeiro</option>
+          </select>
+        </div>
         <div class="bulk-toolbar">
           <div class="bulk-left"><label class="check-wrap"><input type="checkbox" id="selectAllTransactions"> Selecionar despesas</label><span class="bulk-count" id="bulkCount">0 selecionados</span></div>
           <div class="bulk-actions"><button class="bulk-btn debito" id="bulkDebitBtn" type="button">Marcar como Débito</button><button class="bulk-btn credito" id="bulkCreditBtn" type="button">Marcar como Crédito</button><button class="bulk-btn clean" id="dedupeBtn" type="button">Remover duplicados</button></div>
@@ -1260,7 +1308,7 @@
   const SUPABASE_URL = 'https://vmwezddpfjxstqtjgmzi.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_35zsogKorV_QqhtN0RUSgg_2aZp3u74';
   const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  let currentUser = null, transactions = [], categories = [], budgets = [], importRows = [], selectedForecastMonthKey = null;
+  let currentUser = null, transactions = [], categories = [], budgets = [], importRows = [], selectedForecastMonthKey = null, transactionSortOrder = 'desc';
   const $ = id => document.getElementById(id);
   const fmt = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
   const monthName = () => new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
@@ -1628,10 +1676,29 @@
       return `<div class="tx-item"><div class="tx-icon ${isR?'bg-green green':'bg-red red'}">${isR?'↗':'↘'}</div><div><div class="tx-title">${cleanDesc||''}</div><div class="tx-sub">${t.categoria||''} • ${(t.data||'').split('-').reverse().join('/')} <span class="payment-tag ${isR?'receita':pay}">${label}</span></div></div><div><div class="tx-value ${isR?'green':'red'}">${isR?'+ ':'- '}${fmt(t.valor)}</div><button class="link" style="font-size:12px;padding:0" onclick="window.deleteTransaction('${t.id}')">Excluir</button></div></div>`;
     }).join('');
   }
+  function transactionSortTime(t){
+    const datePart = String(t.data || '').slice(0,10);
+    const createdPart = String(t.created_at || '');
+    const combined = createdPart ? createdPart : (datePart ? datePart + 'T00:00:00' : '1970-01-01T00:00:00');
+    const time = new Date(combined).getTime();
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  function sortedTransactionsForPage(){
+    const list = [...transactions];
+    list.sort((a,b)=>{
+      const diff = transactionSortTime(a) - transactionSortTime(b);
+      if(diff === 0) return String(a.id || '').localeCompare(String(b.id || ''));
+      return transactionSortOrder === 'asc' ? diff : -diff;
+    });
+    return list;
+  }
+
   function renderTransactionsPage(){
     if(!$('transactionsFullList')) return;
-    if(!transactions.length){ $('transactionsFullList').innerHTML='<div class="empty">Nenhuma transação cadastrada.</div>'; return; }
-    $('transactionsFullList').innerHTML=transactions.map(t=>{
+    const list = sortedTransactionsForPage();
+    if(!list.length){ $('transactionsFullList').innerHTML='<div class="empty">Nenhuma transação cadastrada.</div>'; return; }
+    $('transactionsFullList').innerHTML=list.map(t=>{
       const isR=t.tipo==='receita';
       const cat=t.categoria||'Sem categoria';
       const desc=cleanPaymentText(t.descricao||'');
@@ -1761,6 +1828,7 @@
   if($('mobImport')) $('mobImport').onclick=()=>setPage('import');
   $('newTransactionBtn').onclick=()=>openModal('transactionModal'); $('newTransactionBtnPage').onclick=()=>openModal('transactionModal'); $('addTransactionLink').onclick=()=>setPage('transactions'); $('addTransactionBottom').onclick=()=>openModal('transactionModal'); $('navTransactions').onclick=()=>setPage('transactions'); $('navOverview').onclick=()=>setPage('overview'); $('navBudgets').onclick=()=>setPage('budgets'); $('navForecast').onclick=()=>setPage('forecast'); $('navCategories').onclick=()=>setPage('categories'); $('navImport').onclick=()=>setPage('import'); $('categoriesBtn').onclick=()=>setPage('categories'); if($('viewCategoriesBtn')) $('viewCategoriesBtn').onclick=()=>setPage('categories'); const openBudgetModal=()=>{ $('bId').value=''; $('bValor').value=''; setMsg($('budgetMsg'),''); populateBudgetSelect(); openModal('budgetModal'); }; $('newBudgetBtn').onclick=openBudgetModal; $('newBudgetOverviewBtn').onclick=openBudgetModal; if($('newForecastBtn')) $('newForecastBtn').onclick=openForecastModal;
   $('newCategoryTopBtn').onclick=()=>openCategoryModal('despesa'); $('newExpenseCategoryBtn').onclick=()=>openCategoryModal('despesa'); $('newIncomeCategoryBtn').onclick=()=>openCategoryModal('receita'); $('tTipo').addEventListener('change', populateCategorySelects); if($('fTipo')) $('fTipo').addEventListener('change', populateForecastCategorySelect); $('tPagamento').addEventListener('change', updatePaymentFields); $('tData').addEventListener('change', updatePaymentFields); document.querySelectorAll('#colorPalette button').forEach(b=>b.onclick=()=>{ $('cCor').value=b.dataset.color; document.querySelectorAll('#colorPalette button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); });
+  if($('transactionSortOrder')) $('transactionSortOrder').addEventListener('change', e=>{ transactionSortOrder = e.target.value; renderTransactionsPage(); updateBulkCount(); });
   if($('selectAllTransactions')) $('selectAllTransactions').addEventListener('change', e=>{ document.querySelectorAll('.tx-check').forEach(c=>c.checked=e.target.checked); updateBulkCount(); });
   if($('bulkDebitBtn')) $('bulkDebitBtn').onclick=()=>bulkUpdatePayment('debito');
   if($('bulkCreditBtn')) $('bulkCreditBtn').onclick=()=>bulkUpdatePayment('credito');
